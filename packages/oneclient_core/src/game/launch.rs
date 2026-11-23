@@ -432,6 +432,7 @@ async fn start(
             cwd.join("mods")
         };
         crate::game::ensure_qeezy_client(&cluster, &qeezy_mods_dir).await;
+        crate::game::official::resolve_qeezy_pack_duplicates(&cwd, &qeezy_mods_dir).await;
     }
 
     if !dedicated {

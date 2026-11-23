@@ -58,6 +58,68 @@ async fn write_qeezy_client(mods_dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Qeezy Client's mod pack downloads mods by itself. If the same mod is also provided by another
+/// jar in the instance (a launcher bundle, or one the player added), Fabric refuses to start, so the
+/// copy Qeezy Client downloaded is removed and forgotten. Mods it didn't download are never touched.
+pub async fn resolve_qeezy_pack_duplicates(game_dir: &Path, mods_dir: &Path) {
+    let state_file = game_dir.join("config").join("qeezyclient").join("pack-state.json");
+    let Ok(text) = tokio::fs::read_to_string(&state_file).await else {
+        return;
+    };
+    let Ok(mut state) = serde_json::from_str::<Value>(&text) else {
+        return;
+    };
+    let Some(installed) = state.get("installed").and_then(Value::as_object).cloned() else {
+        return;
+    };
+    // file name -> slug, for the mods Qeezy Client downloaded
+    let ours: std::collections::HashMap<String, String> = installed
+        .iter()
+        .filter_map(|(slug, rec)| Some((rec.get("file")?.as_str()?.to_string(), slug.clone())))
+        .collect();
+    if ours.is_empty() {
+        return;
+    }
+
+    let Ok(mut entries) = tokio::fs::read_dir(mods_dir).await else {
+        return;
+    };
+    let mut our_ids: Vec<(String, String, PathBuf)> = Vec::new(); // (mod id, slug, path)
+    let mut other_ids = std::collections::HashSet::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.ends_with(".jar") || name == QEEZY_CLIENT_FILE {
+            continue;
+        }
+        let path = entry.path();
+        let Some(id) = oneclient_content::packages::local_manifest::read_jar_mod_id(&path).await else {
+            continue;
+        };
+        match ours.get(&name) {
+            Some(slug) => our_ids.push((id.id, slug.clone(), path)),
+            None => {
+                other_ids.insert(id.id);
+            }
+        }
+    }
+
+    let mut changed = false;
+    for (id, slug, path) in our_ids {
+        if other_ids.contains(&id) {
+            tracing::info!(mod_id = %id, file = %path.display(), "removing Qeezy pack copy that another jar already provides");
+            if tokio::fs::remove_file(&path).await.is_ok() {
+                if let Some(map) = state.get_mut("installed").and_then(Value::as_object_mut) {
+                    map.remove(&slug);
+                }
+                changed = true;
+            }
+        }
+    }
+    if changed && let Ok(text) = serde_json::to_string_pretty(&state) {
+        tokio::fs::write(&state_file, text).await.ok();
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct OfficialHandoff {
     /// Name of the profile as it appears in the official launcher.
@@ -161,6 +223,7 @@ pub async fn hand_off_to_official_launcher(
         game_dir.join("mods")
     };
     ensure_qeezy_client(&cluster, &mods_dir).await;
+    resolve_qeezy_pack_duplicates(&game_dir, &mods_dir).await;
 
     // The version the official launcher should start.
     let last_version_id = match (cluster.mc_loader, loader_version_id.as_deref()) {
@@ -380,5 +443,44 @@ mod tests {
         let root: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
         assert_eq!(root["version"], 3);
         assert_eq!(root["profiles"]["qeezy-1"]["lastVersionId"], "1.21.11");
+    }
+}
+
+#[cfg(test)]
+mod duplicate_tests {
+    use super::*;
+
+    /// Uses real mod jars from a Qeezy Client test run when they're around.
+    #[tokio::test]
+    async fn pack_copy_is_removed_only_when_another_jar_provides_the_same_mod() {
+        let src = PathBuf::from("/home/claude/qeezy-client/run/mods");
+        let sodium = src.join("sodium-fabric-0.8.14+mc1.21.11.jar");
+        let lithium = src.join("lithium-fabric-0.21.4+mc1.21.11.jar");
+        if !sodium.exists() || !lithium.exists() {
+            return;
+        }
+        let game = std::env::temp_dir().join(format!("qeezy-dupes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&game);
+        let mods = game.join("mods");
+        std::fs::create_dir_all(&mods).unwrap();
+        std::fs::create_dir_all(game.join("config/qeezyclient")).unwrap();
+        // Qeezy pack downloaded sodium + lithium; a launcher bundle also put in sodium under another name
+        std::fs::copy(&sodium, mods.join("sodium-fabric-0.8.14+mc1.21.11.jar")).unwrap();
+        std::fs::copy(&lithium, mods.join("lithium-fabric-0.21.4+mc1.21.11.jar")).unwrap();
+        std::fs::copy(&sodium, mods.join("bundle-sodium.jar")).unwrap();
+        std::fs::write(
+            game.join("config/qeezyclient/pack-state.json"),
+            r#"{"installed":{"sodium":{"versionId":"a","file":"sodium-fabric-0.8.14+mc1.21.11.jar"},"lithium":{"versionId":"b","file":"lithium-fabric-0.21.4+mc1.21.11.jar"}},"swaps":[]}"#,
+        )
+        .unwrap();
+
+        resolve_qeezy_pack_duplicates(&game, &mods).await;
+
+        assert!(!mods.join("sodium-fabric-0.8.14+mc1.21.11.jar").exists(), "Qeezy's duplicate copy goes");
+        assert!(mods.join("bundle-sodium.jar").exists(), "the other copy stays");
+        assert!(mods.join("lithium-fabric-0.21.4+mc1.21.11.jar").exists(), "unique mods stay");
+        let state: Value = serde_json::from_str(&std::fs::read_to_string(game.join("config/qeezyclient/pack-state.json")).unwrap()).unwrap();
+        assert!(state["installed"].get("sodium").is_none());
+        assert!(state["installed"].get("lithium").is_some());
     }
 }
