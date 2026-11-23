@@ -314,3 +314,71 @@ async fn open_official_launcher() -> bool {
         std::process::Command::new("minecraft-launcher").spawn().is_ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("qeezy-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn qeezy_client_replaces_old_copies_and_keeps_other_mods() {
+        let mods = temp_dir("mods");
+        std::fs::write(mods.join("qeezy-client-1.0.0.jar"), b"old").unwrap();
+        std::fs::write(mods.join("sodium.jar"), b"sodium").unwrap();
+        write_qeezy_client(&mods).await.unwrap();
+        assert!(!mods.join("qeezy-client-1.0.0.jar").exists(), "old Qeezy Client should be removed");
+        assert!(mods.join("sodium.jar").exists(), "other mods must stay");
+        assert_eq!(std::fs::read(mods.join(QEEZY_CLIENT_FILE)).unwrap(), QEEZY_CLIENT_JAR);
+        // running again changes nothing
+        write_qeezy_client(&mods).await.unwrap();
+        assert_eq!(std::fs::read_dir(&mods).unwrap().count(), 2);
+    }
+
+    #[tokio::test]
+    async fn launcher_profile_is_added_without_touching_other_profiles() {
+        let mc = temp_dir("dotminecraft");
+        std::fs::write(
+            mc.join("launcher_profiles.json"),
+            r#"{"profiles":{"abc":{"name":"Latest release","type":"latest-release"}},"settings":{"locale":"en-us"},"version":3}"#,
+        )
+        .unwrap();
+        let game_dir = mc.join("instances").join("qeezy");
+        write_launcher_profile(&mc, 7, "Qeezy · Test", "fabric-loader-0.18.4-1.21.11", &game_dir, "-Xmx4096M")
+            .await
+            .unwrap();
+        let root: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
+        assert_eq!(root["profiles"]["abc"]["name"], "Latest release");
+        assert_eq!(root["settings"]["locale"], "en-us");
+        let p = &root["profiles"]["qeezy-7"];
+        assert_eq!(p["name"], "Qeezy · Test");
+        assert_eq!(p["type"], "custom");
+        assert_eq!(p["lastVersionId"], "fabric-loader-0.18.4-1.21.11");
+        assert_eq!(p["gameDir"], game_dir.display().to_string());
+        assert!(p["icon"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert!(mc.join("launcher_profiles.qeezy-backup.json").exists());
+
+        // a second hand-off keeps the original "created" date
+        let created = p["created"].clone();
+        write_launcher_profile(&mc, 7, "Qeezy · Test", "fabric-loader-0.18.4-1.21.11", &game_dir, "-Xmx4096M")
+            .await
+            .unwrap();
+        let again: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
+        assert_eq!(again["profiles"]["qeezy-7"]["created"], created);
+        assert_eq!(again["profiles"].as_object().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn launcher_profile_file_is_created_when_missing() {
+        let mc = temp_dir("fresh");
+        write_launcher_profile(&mc, 1, "Qeezy · Fresh", "1.21.11", &mc.join("g"), "-Xmx2048M").await.unwrap();
+        let root: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
+        assert_eq!(root["version"], 3);
+        assert_eq!(root["profiles"]["qeezy-1"]["lastVersionId"], "1.21.11");
+    }
+}

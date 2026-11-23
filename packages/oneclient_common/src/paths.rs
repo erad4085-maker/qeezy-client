@@ -336,9 +336,9 @@ mod tests {
         assert_eq!(
             APPLICATION,
             if cfg!(debug_assertions) {
-                "OneClient-dev"
+                "QeezyLauncher-dev"
             } else {
-                "OneClient"
+                "QeezyLauncher"
             }
         );
     }
