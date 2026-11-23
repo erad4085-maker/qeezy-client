@@ -2890,11 +2890,47 @@ pub fn update_check_running(cluster_id: ClusterId) -> bool {
     UPDATE_CHECKS.lock().unwrap().contains(&cluster_id)
 }
 
+/// Qeezy: prepare the instance here, then hand it to the official Minecraft Launcher.
+async fn launch_via_official_launcher(
+    actions: &Actions,
+    state: &std::sync::Arc<oneclient_core::LauncherState>,
+    cluster_id: ClusterId,
+) {
+    let events = state.services.events.clone();
+    events.game_stage(cluster_id, oneclient_events::LaunchStage::Downloading);
+    let result = oneclient_core::hand_off_to_official_launcher(state, cluster_id).await;
+    events.game_stage(cluster_id, oneclient_events::LaunchStage::Exited);
+    match result {
+        Ok(handoff) if handoff.opened => actions
+            .notify("Opened in the Minecraft Launcher")
+            .body(format!("Pick \"{}\" next to the Play button and press Play.", handoff.profile_name))
+            .send(),
+        Ok(handoff) => actions
+            .notify("Ready in the Minecraft Launcher")
+            .body(format!(
+                "Open the Minecraft Launcher, pick \"{}\" and press Play.",
+                handoff.profile_name
+            ))
+            .send(),
+        Err(err) => {
+            events.game_failed(cluster_id, format!("{err:#}"));
+        }
+    }
+}
+
 async fn launch(actions: &Actions, cluster_id: ClusterId, extra_jvm_arg: Option<String>) {
     let Ok(state) = launcher::state() else { return };
     let events = state.services.events.clone();
 
     events.game_stage(cluster_id, oneclient_events::LaunchStage::Checking);
+
+    // Qeezy: until Mojang approves our Microsoft sign-in, Play goes through the official launcher
+    if !oneclient_common::constants::MSA_CONFIGURED
+        && !state.auth.default_account().await.ok().flatten().is_some()
+    {
+        launch_via_official_launcher(actions, &state, cluster_id).await;
+        return;
+    }
 
     let was_signed_out = state
         .auth

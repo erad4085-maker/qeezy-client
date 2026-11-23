@@ -6,13 +6,13 @@ use crate::domain::{ContentType, ProviderId};
 use crate::error::{PathsError, PathsResult};
 
 const QUALIFIER: &str = "org";
-const ORGANIZATION: &str = "Polyfrost";
+const ORGANIZATION: &str = "Qeezy";
 
 #[cfg(not(debug_assertions))]
-const APPLICATION: &str = "OneClient";
+const APPLICATION: &str = "QeezyLauncher";
 
 #[cfg(debug_assertions)]
-const APPLICATION: &str = "OneClient-dev";
+const APPLICATION: &str = "QeezyLauncher-dev";
 
 pub const SETTINGS_FILE: &str = "settings.json";
 pub const DATABASE_FILE: &str = "user_data.db";

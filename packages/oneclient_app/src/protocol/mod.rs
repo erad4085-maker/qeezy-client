@@ -21,7 +21,7 @@ use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_perc
 #[cfg(debug_assertions)]
 pub const SCHEME: &str = "oneclient-dev";
 #[cfg(not(debug_assertions))]
-pub const SCHEME: &str = "oneclient";
+pub const SCHEME: &str = "qeezy";
 
 const LAUNCH_HOST: &str = "launch";
 

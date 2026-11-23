@@ -633,7 +633,7 @@ fn miniature(theme: &Theme, pixel: bool, dense: bool) -> Element {
         .spacing(6.)
         .child(theme_icon(theme, "icon-logo", 13., palette.text.0))
         .child(
-            text("OneClient", title_size, palette.text.0).font_weight(if pixel {
+            text("Qeezy", title_size, palette.text.0).font_weight(if pixel {
                 FontWeight::NORMAL
             } else {
                 FontWeight::BOLD

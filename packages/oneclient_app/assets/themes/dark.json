@@ -1,14 +1,14 @@
 {
-  "name": "PolyGlass Dark",
+  "name": "Qeezy Dark",
   "colors": {
     "light": false,
-    "page": "#11171C",
-    "page_elevated": "#151C22",
-    "card": "#1A2229",
-    "component": "#1A2229",
-    "border": "#FFFFFF1A",
-    "text": "#D5DBFF",
-    "text_secondary": "#757883",
-    "accent": "#2B4BFF"
+    "page": "#111218",
+    "page_elevated": "#16171E",
+    "card": "#1B1C25",
+    "component": "#1B1C25",
+    "border": "#FFFFFF16",
+    "text": "#ECEBFF",
+    "text_secondary": "#8B90A0",
+    "accent": "#7C5CFF"
   }
 }

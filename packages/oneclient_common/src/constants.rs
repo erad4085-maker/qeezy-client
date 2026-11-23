@@ -1,9 +1,21 @@
 pub const DUMMY_REPLACE_NEWLINE: &str = "\n";
 
-pub const MICROSOFT_CLIENT_ID: &str = "9419b7ee-1448-4d1b-b52a-550d8f36ab56";
+/// Qeezy Launcher's own Azure app (set QEEZY_MSA_CLIENT_ID at build time).
+/// Empty until Mojang approves it; the launcher then offers "Play via official launcher" instead.
+pub const MICROSOFT_CLIENT_ID: &str = match option_env!("QEEZY_MSA_CLIENT_ID") {
+    Some(id) => id,
+    None => "",
+};
+pub const MSA_CONFIGURED: bool = !MICROSOFT_CLIENT_ID.is_empty();
 pub const MINECRAFT_SCOPES: &str = "XboxLive.SignIn XboxLive.offline_access";
-pub const CURSEFORGE_API_KEY: &str = "$2a$10$6utA1UNSmFPrE/Lh7b7ndeeGmiOkjKNY8kpFB0fsmE/d42ZAfFgCe";
-pub const DISCORD_CLIENT_ID: &str = "1426999264633946334";
+pub const CURSEFORGE_API_KEY: &str = match option_env!("QEEZY_CURSEFORGE_API_KEY") {
+    Some(key) => key,
+    None => "",
+};
+pub const DISCORD_CLIENT_ID: &str = match option_env!("QEEZY_DISCORD_CLIENT_ID") {
+    Some(id) => id,
+    None => "",
+};
 
 pub const MODRINTH_API_URL: &str = "https://api.modrinth.com";
 pub const MODRINTH_CDN_PREFIX: &str = "https://cdn.modrinth.com/data/";
@@ -20,17 +32,16 @@ pub const PLUS_BACKEND_URL: &str = "https://plus.polyfrost.org";
 pub const CRASH_DATA_URL: &str =
     "https://raw.githubusercontent.com/Polyfrost/CrashData/refs/heads/main/crashes.json";
 
-pub const DISCORD_URL: &str = "https://discord.com/invite/polyfrost";
+pub const DISCORD_URL: &str = "https://discord.com/invite/polyfrost"; // upstream community (OneLauncher)
 
-pub const SENTRY_DSN: &str = match option_env!("ONECLIENT_SENTRY_DSN") {
+/// Crash reports are off unless a DSN of our own is set at build time.
+pub const SENTRY_DSN: &str = match option_env!("QEEZY_SENTRY_DSN") {
     Some(dsn) => dsn,
-    None => {
-        "https://e7dff7e07427e1a28b9212cfcc8ddc1e@o4511714343124992.ingest.us.sentry.io/4511714354135040"
-    }
+    None => "",
 };
 
 pub const LAUNCHER_LABEL: &str = concat!(
-    "OneClient v",
+    "Qeezy Launcher v",
     env!("CARGO_PKG_VERSION"),
     cfg_select! {
         debug_assertions => " (debug)",

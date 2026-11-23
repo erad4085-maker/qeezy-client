@@ -1,7 +1,17 @@
-pub const WINDOW_APP_ID: &str = "oneclient_app";
-pub const WINDOW_TITLE: &str = "OneClient";
+pub const WINDOW_APP_ID: &str = "qeezy_launcher";
+pub const WINDOW_TITLE: &str = "Qeezy Launcher";
 
-pub const UPDATER_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGODk3MkMyMjg0MjFDMDUKUldRRkhFSW93bktKSHpkWjNEMXNzaDVINVpCTU8xSnhuK2RnV0dTZ2FkcFJWbG1zUkhGYTNjaUkK";
-pub const UPDATER_ENDPOINT: &str =
-    "https://github.com/Polyfrost/OneLauncher/releases/latest/download/latest.json";
-pub const RELEASES_URL: &str = "https://github.com/Polyfrost/OneLauncher/releases/latest";
+/// Self-updates come from Qeezy's own GitHub releases, signed with our own key (set at build time).
+/// Both empty = the updater stays off.
+pub const UPDATER_PUBKEY: &str = match option_env!("QEEZY_UPDATER_PUBKEY") {
+    Some(key) => key,
+    None => "",
+};
+pub const UPDATER_ENDPOINT: &str = match option_env!("QEEZY_UPDATER_ENDPOINT") {
+    Some(url) => url,
+    None => "",
+};
+pub const RELEASES_URL: &str = match option_env!("QEEZY_RELEASES_URL") {
+    Some(url) => url,
+    None => "https://github.com/",
+};

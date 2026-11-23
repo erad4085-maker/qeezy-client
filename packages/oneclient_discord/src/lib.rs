@@ -97,7 +97,7 @@ impl Worker {
     fn new(enabled: bool) -> Self {
         Self {
             client: DiscordIpcClient::new(DISCORD_CLIENT_ID),
-            enabled,
+            enabled: enabled && !DISCORD_CLIENT_ID.is_empty(),
             connected: false,
             ever_connected: false,
             presence: Presence::Idle,

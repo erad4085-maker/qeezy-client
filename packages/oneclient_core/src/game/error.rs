@@ -2,6 +2,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GameError {
+    /// Qeezy: "Play via official launcher" problems, already worded for the user
+    #[error("{0}")]
+    OfficialLauncher(String),
+
     #[error("no client download exists for version {0}")]
     NoClientDownload(String),
 

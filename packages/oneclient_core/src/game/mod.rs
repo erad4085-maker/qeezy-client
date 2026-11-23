@@ -8,6 +8,7 @@ mod heal;
 mod launch;
 mod log_replay;
 pub(crate) mod natives;
+pub mod official;
 mod process;
 mod reattach;
 mod session;
@@ -40,6 +41,7 @@ pub use game_options::{
     write_graphics_backend, write_options,
 };
 pub use heal::clear_zeroed_files;
+pub use official::{OfficialHandoff, ensure_qeezy_client, hand_off_to_official_launcher, official_minecraft_dir};
 pub use launch::{
     LaunchedGame, crash_mod_issues, is_running, launch_cluster, launch_cluster_with, repair_cluster,
 };

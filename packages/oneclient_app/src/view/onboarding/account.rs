@@ -31,6 +31,8 @@ impl Component for OnboardingAccount {
             ))
             .child(match &account {
                 Some(account) => account_preview(account).into_element(),
+                // Qeezy: no approved Microsoft sign-in yet, Play goes through the official launcher
+                None if !oneclient_common::constants::MSA_CONFIGURED => official_launcher_card().into_element(),
                 None => {
                     let start = msa.clone();
                     sign_in_card(msa.pending, msa.error.clone(), move |_| start.start())
@@ -45,7 +47,7 @@ impl Component for OnboardingAccount {
             onboarding_nav(
                 Some(Route::OnboardingLanguage {}),
                 Route::OnboardingBundlePicker {},
-                has_account,
+                has_account || !oneclient_common::constants::MSA_CONFIGURED,
             ),
         );
 
@@ -90,6 +92,39 @@ fn account_preview(account: &MinecraftAccount) -> impl IntoElement {
                                 .color(colors::fg_secondary()),
                         ),
                 ),
+        )
+        .into_element()
+}
+
+/// Qeezy: shown instead of the sign-in button until Mojang approves Qeezy Launcher.
+fn official_launcher_card() -> impl IntoElement {
+    rect()
+        .vertical()
+        .spacing(8.)
+        .width(Size::fill())
+        .child(
+            rect()
+                .horizontal()
+                .spacing(8.)
+                .cross_align(Alignment::Center)
+                .child(Icon::new(IconType::InfoCircle).size(16.).color(colors::brand()))
+                .child(
+                    label()
+                        .text("You play through the official Minecraft Launcher for now")
+                        .font_size(text_size(16.))
+                        .font_weight(FontWeight::SEMI_BOLD)
+                        .color(colors::fg_primary()),
+                ),
+        )
+        .child(
+            label()
+                .text(
+                    "Qeezy Launcher's own Microsoft sign-in is waiting for Mojang's approval. Until then, \
+                     Play sets everything up here, adds a \"Qeezy\" profile to the official Minecraft \
+                     Launcher and opens it. You're already signed in there, so just press Play.",
+                )
+                .font_size(text_size(13.))
+                .color(colors::fg_secondary()),
         )
         .into_element()
 }

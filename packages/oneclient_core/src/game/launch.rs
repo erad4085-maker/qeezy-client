@@ -424,6 +424,16 @@ async fn start(
         }
     }
 
+    // Qeezy: every Fabric 1.21.11 instance gets Qeezy Client
+    {
+        let qeezy_mods_dir = if mods_in_cluster {
+            paths::cluster_mods_dir(&cluster.folder_name)?
+        } else {
+            cwd.join("mods")
+        };
+        crate::game::ensure_qeezy_client(&cluster, &qeezy_mods_dir).await;
+    }
+
     if !dedicated {
         crate::game::link_cluster_logs(&cluster, &cwd).await;
     }
