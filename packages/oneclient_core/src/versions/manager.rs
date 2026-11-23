@@ -135,9 +135,11 @@ impl VersionsManager {
 
     #[tracing::instrument(level = "debug", skip(services))]
     async fn fetch_arts(
-        services: &LauncherServices,
+        _services: &LauncherServices,
     ) -> LauncherResult<Option<(ArtsManifest, bool)>> {
-        Self::fetch_json(services, "version-arts.json", "arts.json").await
+        // Qeezy: Polyfrost's version art is their branding (all rights reserved), so the
+        // launcher always shows Qeezy's own bundled background instead.
+        Ok(None)
     }
 
     async fn fetch_json<T: DeserializeOwned>(
