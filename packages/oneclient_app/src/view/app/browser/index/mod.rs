@@ -295,7 +295,9 @@ impl Component for BrowserBody {
             (None, Some(c)) if loader_fixed => vec![c.mc_loader],
             _ => picked_loader.into_iter().collect(),
         };
-        let curseforge_blocked = loader_fixed && loaders.contains(&GameLoader::Ornithe);
+        // Qeezy: no CurseForge key of our own yet, so browse Modrinth only
+        let curseforge_blocked = oneclient_common::constants::CURSEFORGE_API_KEY.is_empty()
+            || (loader_fixed && loaders.contains(&GameLoader::Ornithe));
         if curseforge_blocked && *provider.peek() == ProviderId::CurseForge {
             provider.set(ProviderId::Modrinth);
         }
