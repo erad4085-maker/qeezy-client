@@ -373,7 +373,7 @@
   "oneclient.browser.index.card.incompatible": "Incompatible",
   "oneclient.browser.index.card.installing": "Installing",
   "oneclient.browser.index.categories": "CATEGORIES",
-  "oneclient.browser.index.curseforge_blocked": "CurseForge doesn't have any compatible mods",
+  "oneclient.browser.index.curseforge_blocked": "CurseForge isn't set up in Qeezy Launcher yet. Modrinth has almost everything.",
   "oneclient.browser.index.loader.any": "Any loader",
   "oneclient.browser.index.no_results": "No results. Try a different search, category or provider.",
   "oneclient.browser.index.search": "Search for content",
