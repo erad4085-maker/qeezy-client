@@ -133,7 +133,7 @@ impl VersionsManager {
         Self::fetch_json(services, "versions.json", "metadata.json").await
     }
 
-    #[tracing::instrument(level = "debug", skip(services))]
+    #[tracing::instrument(level = "debug", skip(_services))]
     async fn fetch_arts(
         _services: &LauncherServices,
     ) -> LauncherResult<Option<(ArtsManifest, bool)>> {
