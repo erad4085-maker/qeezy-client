@@ -32,7 +32,11 @@ pub const PLUS_BACKEND_URL: &str = "https://plus.polyfrost.org";
 pub const CRASH_DATA_URL: &str =
     "https://raw.githubusercontent.com/Polyfrost/CrashData/refs/heads/main/crashes.json";
 
-pub const DISCORD_URL: &str = "https://discord.com/invite/polyfrost"; // upstream community (OneLauncher)
+/// Where the crash dialog sends people for help. Empty = the card is hidden.
+pub const DISCORD_URL: &str = match option_env!("QEEZY_SUPPORT_URL") {
+    Some(url) => url,
+    None => "",
+};
 
 /// Crash reports are off unless a DSN of our own is set at build time.
 pub const SENTRY_DSN: &str = match option_env!("QEEZY_SENTRY_DSN") {

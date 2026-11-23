@@ -101,7 +101,8 @@ impl Component for CrashDialog {
                             .child(header(&crash))
                             .child(subtitle(&crash))
                             .child(body(&crash, confirm))
-                            .child(discord_card(confirm))
+                            // Qeezy: only when we have our own support link (Polyfrost can't help with this fork)
+                            .maybe_child((!DISCORD_URL.is_empty()).then(|| discord_card(confirm).into_element()))
                             .child(actions(&crash, dispatch, log_path.clone(), upload_confirm)),
                     ),
             )
