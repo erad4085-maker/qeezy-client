@@ -309,6 +309,13 @@ pub fn on_brand_disabled() -> Color {
     }
 }
 
+/// Qeezy: the far end of the accent gradient (accent blended into Qeezy blue).
+pub fn brand_gradient_end(start: Color) -> Color {
+    let (r, g, b) = (start.r(), start.g(), start.b());
+    let (er, eg, eb) = mix((r, g, b), (63, 169, 255), 0.85);
+    Color::from_argb(start.a(), er, eg, eb)
+}
+
 pub fn brand() -> Color {
     color(brand_rgb())
 }

@@ -336,7 +336,18 @@ impl Component for Button {
 
         rect.style_mut().clone_from(&self.style);
 
-        rect = rect.background(background).color(foreground);
+        // Qeezy: primary buttons get the purple -> blue gradient, like Qeezy Config
+        let fill: Fill = if matches!(self.variant, ButtonVariant::Primary) && enabled() {
+            let end = colors::brand_gradient_end(background);
+            LinearGradient::new()
+                .angle(-90.)
+                .stop((background, 0.))
+                .stop((end, 100.))
+                .into()
+        } else {
+            background.into()
+        };
+        rect = rect.background(fill).color(foreground);
 
         if !enabled() {
             rect = rect.opacity(colors::disabled_opacity());
