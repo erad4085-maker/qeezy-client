@@ -1,108 +1,33 @@
-<div align="center">
+# Qeezy Launcher
 
-<img src=".github/media/RepoBanner.png" alt="Repository Banner" />
+A private Minecraft launcher for a small group of friends, with **Qeezy Client** built in.
 
-# OneClient  |  OneLauncher
-The monorepo containing the code for OneLauncher, OneClient, and their core backend.
+> **Qeezy Launcher is a modified version of [OneLauncher / OneClient](https://github.com/Polyfrost/OneLauncher) by Polyfrost and Contributors**, based on release `oneclient-2.12.1`.
+> It is licensed under the **GNU General Public License v3.0 only**, the same as the original: see [LICENSE](./LICENSE) and [ATTRIBUTION.md](./ATTRIBUTION.md).
+> Not affiliated with or endorsed by Polyfrost, Mojang or Microsoft. The original README is kept in [README.upstream.md](./README.upstream.md).
 
-OneClient is a Minecraft client featuring fully 100% open-source components, offering many packaged and pre-configured mods in one click.
+## What's different from OneClient
 
-</div>
+- **Name and look:** Qeezy name, icons, logo, colours and home background. Polyfrost's branding (all rights reserved) has been removed. The "Design © Polyfrost" notice stays as their copyright credit.
+- **Own data folder** (`Qeezy/QeezyLauncher`), so it never touches an existing OneClient install.
+- **Qeezy Client built in:** every Fabric 1.21.11 instance gets the bundled Qeezy Client mod (`packages/oneclient_core/assets/qeezy-client.jar`).
+- **Play via official launcher:** until Mojang approves Qeezy Launcher's own Microsoft sign-in, Play prepares the instance here, then adds a "Qeezy · …" profile to the official Minecraft Launcher and opens it (`packages/oneclient_core/src/game/official.rs`). The official launcher handles the account and game ownership.
+- **No Polyfrost accounts or keys:** no crash reports to Polyfrost's Sentry, no Discord rich presence app, no CurseForge key, no Polyfrost Microsoft app ID, and no self-updates from Polyfrost's releases. Each of these can be switched back on with our own keys at build time (see below).
+- Version metadata and bundles are still read from Polyfrost's public metadata server.
 
-## Installing
+## Build-time settings
 
-You can install the latest release of OneClient from our website: [https://polyfrost.org/projects/oneclient](https://polyfrost.org/projects/oneclient)
-as well as our [GitHub releases](https://github.com/Polyfrost/OneLauncher/releases/latest).
+| Variable | What it does |
+| --- | --- |
+| `QEEZY_MSA_CLIENT_ID` | Our Azure app ID. Set it once Mojang approves it, and Microsoft sign-in works inside the launcher. |
+| `QEEZY_UPDATER_ENDPOINT`, `QEEZY_UPDATER_PUBKEY` | Self-update feed and minisign public key. Leave both empty to turn updates off. |
+| `QEEZY_SENTRY_DSN`, `QEEZY_DISCORD_CLIENT_ID`, `QEEZY_CURSEFORGE_API_KEY` | Optional: our own crash reports, Discord presence and CurseForge access. |
 
-| Windows (x86_64) | macOS (Intel & Apple Silicon) | Linux (x86_64)                                          |
-|------------------|-------------------------------|---------------------------------------------------------|
-| Installer 🔄      | DMG 🔄                        | AppImage 🔄                                             |
-|                  | App Bundle 🔄                 | DEB                                                     |
-|                  |                               | RPM                                                     |
-|                  |                               | *[RPM (COPR)](https://copr.fedorainfracloud.org/coprs/polyfrost/OneClient/) 🔄 |
-|                  |                               | [AUR](https://aur.archlinux.org/packages/oneclient-bin)|
-|                  |                               | Flatpak|
+## Building
 
-> 🔄 = Has support for autoupdating built-in
+- **Windows installer:** GitHub → Actions → **Qeezy Launcher (Windows)** → Run workflow. The installer appears under the run's artifacts. Pushing a tag like `v1.0.0` also attaches it to a release.
+- **Locally:** `cargo build --release --bin oneclient_app` (Rust 1.97+). Upstream's original workflows are kept in `.github/workflows-upstream/` for reference.
 
-<details>
+## Source
 
-<summary><h3>Flatpak Installation</h3></summary>
-
-On most big distros, you can just double-click the .flatpak file to install it. You can also:
-1. First, navigate to the folder the .flatpak was downloaded in: (e.g. Downloads)
-```
-cd Downloads
-```
-2. You can then install the package: (change filename with the one you downloaded)
-```
-flatpak install ./OneClient_2.11.0_linux_x86_64.flatpak 
-```
-</details>
-<details>
-
-<summary><h3>COPR Installation</h3></summary>
-
-On supported distributions (RHEL, Fedora, etc.), you can make use of the Fedora COPR instead of using the AppImage or manually installing the RPM file.
-1. First, you have to enable the repository:
-```
-sudo dnf copr enable polyfrost/OneClient
-```
-2. You can then install the package:
-```
-sudo dnf install oneclient-bin
-```
-
-</details>
-
-## Contributing
-
-We welcome contributions! Please read our [contributing guidelines](CONTRIBUTING.md) before getting started.
-
-
-### Requirements
-
-The project targets **Rust 1.97** or later. You can install Rust via [rustup](https://rustup.rs/).
-
-
-### Building & Running
-
-```sh
-# Run the app
-cargo run -p oneclient_app
-
-# Build a release binary
-cargo build -p oneclient_app --release
-```
-
-
-### Packaging / Releasing
-
-Installers are produced with [**cargo-packager**](https://github.com/crabnebula-dev/cargo-packager)
-(the standalone bundler spun out of the Tauri bundler). Config lives in
-[`packages/oneclient_app/Cargo.toml`](./packages/oneclient_app/Cargo.toml) under
-`[package.metadata.packager]`.
-
-```sh
-cargo install cargo-packager --locked
-
-# Build the binary, then bundle it for the current OS:
-cargo build --release -p oneclient_app
-cargo packager --release -p oneclient_app --formats <targets>
-#   Windows: nsis      macOS: app,dmg      Linux: deb,appimage
-```
-
-
-### Versioning
-
-The workspace shares a single version, defined in the root [`Cargo.toml`](./Cargo.toml) under `[workspace.package]`.
-
-Versions and release notes come from [Knope](https://knope.tech) change files in [`.changeset/`](./.changeset).
-Add one per user-facing change with `knope document-change` (installed via `cargo install knope`). The
-`OneClient Release Build` workflow consumes them, bumps the version, writes [`CHANGELOG.md`](./CHANGELOG.md),
-and uses the new entry as the GitHub release body, which is what the launcher's changelog page shows.
-
-
-## Code signing
-
-This program uses free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=0install), and a certificate by the [SignPath Foundation](https://signpath.org?utm_source=foundation&utm_medium=github&utm_campaign=0install). We thank them very much to their contributions to OSS software!
+Under the GPL, anyone you give Qeezy Launcher to can ask for this source code. Keep this repository and share it with them.

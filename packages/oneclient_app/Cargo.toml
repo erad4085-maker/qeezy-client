@@ -98,13 +98,13 @@ windows = { version = "=0.62.2", features = [
 winresource = "=0.1.31"
 
 [package.metadata.packager]
-product-name = "OneClient"
-identifier = "org.polyfrost.OneClient"
+product-name = "Qeezy Launcher"
+identifier = "dev.qeezy.launcher"
 category = "Game"
-publisher = "Polyfrost Inc."
-copyright = "© 2026 Polyfrost Inc."
-homepage = "https://polyfrost.org/projects/oneclient"
-long-description = "Next-generation open source Minecraft launcher"
+publisher = "Qeezy"
+copyright = "Qeezy Launcher © 2026 Qeezy. Based on OneClient © 2026 Polyfrost Inc. (GPL-3.0)"
+homepage = "https://github.com/"
+long-description = "Qeezy Launcher: a private Minecraft launcher with Qeezy Client built in"
 formats = ["nsis", "app", "dmg", "deb", "appimage"]
 binaries = [{ path = "oneclient_app", main = true }]
 icons = [

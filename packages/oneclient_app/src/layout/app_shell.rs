@@ -243,7 +243,7 @@ pub(crate) fn appshell_overlay(alpha: f32) -> Rect {
         )
 }
 
-pub const HOME_BACKGROUND_ASSET: &str = "backgrounds/CavesAndCliffs.jpg";
+pub const HOME_BACKGROUND_ASSET: &str = "backgrounds/QeezyHome.jpg";
 
 fn home_art(cluster: Option<&Cluster>) -> DynamicArt {
     cluster

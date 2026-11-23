@@ -1929,7 +1929,7 @@
   "oneclient.layout.game_error.copied": "Error message copied to your clipboard.",
   "oneclient.layout.game_error.description": "Minecraft could not be launched. Error details:",
   "oneclient.layout.game_error.title": "Game failed to launch",
-  "oneclient.layout.onboarding.copyright": "Design © 2026 Polyfrost. All rights reserved.",
+  "oneclient.layout.onboarding.copyright": "Qeezy Launcher, based on OneClient by Polyfrost (GPL-3.0). Design © 2026 Polyfrost. All rights reserved.",
   "oneclient.layout.pending_launch.already_running": "Minecraft is already running",
   "oneclient.layout.pending_launch.already_starting": "Minecraft is already starting",
   "oneclient.layout.pending_launch.another_version": "Another version",
