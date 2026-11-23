@@ -105,6 +105,7 @@ pub struct ClusterContextMenu {
 impl Component for ClusterContextMenu {
     fn render(&self) -> impl IntoElement {
         let game = use_game_snapshot();
+        let dispatch = crate::hooks::use_dispatch();
         let mut deleting = use_state(|| false);
         let mut position = self.position;
         let target = self.target.clone();
@@ -124,6 +125,18 @@ impl Component for ClusterContextMenu {
                     position.set(None);
                     let _ = RouterContext::get().push(route.clone());
                 });
+            }
+            {
+                // Qeezy: always offer the official launcher route
+                let dispatch = dispatch.clone();
+                context = context.separator().action(
+                    IconType::LinkExternal01,
+                    "Play via official launcher",
+                    move |()| {
+                        position.set(None);
+                        dispatch.launch_cluster_official(cluster_id);
+                    },
+                );
             }
             if can_delete {
                 context = context.separator().danger_action(

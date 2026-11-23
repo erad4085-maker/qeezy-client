@@ -1185,6 +1185,19 @@ impl Actions {
         self.launch_with(cluster_id, None);
     }
 
+    /// Qeezy: prepare the instance and open it in the official Minecraft Launcher.
+    pub fn launch_cluster_official(&self, cluster_id: ClusterId) {
+        if let Some((title, body)) = cluster_busy(cluster_id) {
+            self.notify(title).body(body).send();
+            return;
+        }
+        let actions = self.clone();
+        spawn_global(async move {
+            let Ok(state) = launcher::state() else { return };
+            launch_via_official_launcher(&actions, &state, cluster_id).await;
+        });
+    }
+
     pub fn launch_cluster_for_invite(&self, cluster_id: ClusterId, invite_id: i32) {
         self.launch_with(
             cluster_id,
