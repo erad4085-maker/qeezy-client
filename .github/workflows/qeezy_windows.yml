@@ -21,6 +21,9 @@ jobs:
       QEEZY_UPDATER_ENDPOINT: ${{ vars.QEEZY_UPDATER_ENDPOINT }}
       QEEZY_UPDATER_PUBKEY: ${{ vars.QEEZY_UPDATER_PUBKEY }}
       QEEZY_RELEASES_URL: https://github.com/${{ github.repository }}/releases/latest
+      # Same as upstream's nightly: thin LTO builds several times faster than the fat-LTO release profile
+      CARGO_PROFILE_RELEASE_LTO: thin
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
