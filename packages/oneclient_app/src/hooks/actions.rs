@@ -2937,13 +2937,30 @@ async fn launch(actions: &Actions, cluster_id: ClusterId, extra_jvm_arg: Option<
 
     events.game_stage(cluster_id, oneclient_events::LaunchStage::Checking);
 
-    // Qeezy: until Mojang approves our Microsoft sign-in, Play goes through the official launcher
-    if !oneclient_common::constants::MSA_CONFIGURED
-        && !state.auth.default_account().await.ok().flatten().is_some()
+    // Qeezy: until our own Microsoft sign-in is approved, reuse the account the official Minecraft
+    // Launcher already signed in and launch the game directly. If that token is missing or expired,
+    // open the official launcher once so the user can (re)sign in there.
+    let qeezy_account = if !oneclient_common::constants::MSA_CONFIGURED
+        && state.auth.default_account().await.ok().flatten().is_none()
     {
-        launch_via_official_launcher(actions, &state, cluster_id).await;
-        return;
-    }
+        match oneclient_core::read_official_minecraft_account() {
+            oneclient_core::OfficialAccount::Ready(acc) => Some(*acc),
+            oneclient_core::OfficialAccount::Stale => {
+                actions
+                    .notify("Sign-in expired")
+                    .body("Opening the Minecraft Launcher so you can log in again, then press Play once.")
+                    .send();
+                launch_via_official_launcher(actions, &state, cluster_id).await;
+                return;
+            }
+            oneclient_core::OfficialAccount::Missing => {
+                launch_via_official_launcher(actions, &state, cluster_id).await;
+                return;
+            }
+        }
+    } else {
+        None
+    };
 
     let was_signed_out = state
         .auth
@@ -2953,20 +2970,23 @@ async fn launch(actions: &Actions, cluster_id: ClusterId, extra_jvm_arg: Option<
         .flatten()
         .is_some_and(|a| a.needs_sign_in());
 
-    let account = match state.auth.default_account_for_launch().await {
-        Ok(account) => account,
-        Err(err) => {
-            events.game_failed(cluster_id, format!("{err:#}"));
-            return;
+    let account = if let Some(acc) = qeezy_account {
+        acc
+    } else {
+        match state.auth.default_account_for_launch().await {
+            Ok(Some(account)) => account,
+            Ok(None) => {
+                events.game_failed(
+                    cluster_id,
+                    t("oneclient.actions.launch.no_account").to_string(),
+                );
+                return;
+            }
+            Err(err) => {
+                events.game_failed(cluster_id, format!("{err:#}"));
+                return;
+            }
         }
-    };
-
-    let Some(account) = account else {
-        events.game_failed(
-            cluster_id,
-            t("oneclient.actions.launch.no_account").to_string(),
-        );
-        return;
     };
 
     // The renewal may have just signed the account out or back in the accounts

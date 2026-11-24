@@ -9,6 +9,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use base64::Engine as _;
+use chrono::{DateTime, Utc};
+use oneclient_auth::{AccountKind, MinecraftAccount};
 use oneclient_common::domain::GameLoader;
 use oneclient_common::paths;
 use oneclient_content::bundles::BUNDLE_APPLY_BUDGET;
@@ -120,6 +122,108 @@ pub async fn resolve_qeezy_pack_duplicates(game_dir: &Path, mods_dir: &Path) {
     }
 }
 
+/// Result of trying to reuse the account the official Minecraft Launcher already signed in.
+pub enum OfficialAccount {
+    /// A valid token was found — launch the game directly with it.
+    Ready(Box<MinecraftAccount>),
+    /// An account exists but its token has expired — open the official launcher once to refresh.
+    Stale,
+    /// No usable account was found (never logged in to the official launcher).
+    Missing,
+}
+
+/// Reads the token the official Minecraft Launcher saved for the user's own account, so Qeezy can
+/// launch the game straight away without opening the official launcher window. This is the user's
+/// own account and token on their own machine — nothing is authenticated or impersonated here; the
+/// official launcher did the real sign-in. The token is short-lived, so the user reopens the
+/// official launcher now and then to refresh it.
+pub fn read_official_minecraft_account() -> OfficialAccount {
+    let mut files = Vec::new();
+    if let Some(dir) = official_minecraft_dir() {
+        files.push(dir.join("launcher_accounts.json"));
+        files.push(dir.join("launcher_accounts_microsoft_store.json"));
+    }
+    // Microsoft Store / Xbox app packaged launcher keeps its own .minecraft
+    #[cfg(target_os = "windows")]
+    if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+        let packaged = PathBuf::from(base)
+            .join("Packages")
+            .join("Microsoft.4297127D64EC6_8wekyb3d8bbwe")
+            .join("LocalCache")
+            .join("Roaming")
+            .join(".minecraft");
+        files.push(packaged.join("launcher_accounts.json"));
+    }
+
+    let mut saw_stale = false;
+    for file in files {
+        match account_from_file(&file) {
+            Some(Ok(account)) => return OfficialAccount::Ready(Box::new(account)),
+            Some(Err(())) => saw_stale = true, // found an account but the token was expired
+            None => {}
+        }
+    }
+    if saw_stale { OfficialAccount::Stale } else { OfficialAccount::Missing }
+}
+
+/// None = no account in this file; Some(Err) = account present but token expired; Some(Ok) = usable.
+fn account_from_file(file: &Path) -> Option<Result<MinecraftAccount, ()>> {
+    let text = std::fs::read_to_string(file).ok()?;
+    let root: Value = serde_json::from_str(&text).ok()?;
+    let accounts = root.get("accounts")?.as_object()?;
+    if accounts.is_empty() {
+        return None;
+    }
+    let active = root.get("activeAccountLocalId").and_then(Value::as_str);
+
+    // Prefer the active account, else the first one that has a Minecraft profile.
+    let ordered = active
+        .and_then(|id| accounts.get(id).map(|a| (id, a)))
+        .into_iter()
+        .chain(accounts.iter().map(|(k, v)| (k.as_str(), v)));
+
+    for (_, acc) in ordered {
+        let profile = match acc.get("minecraftProfile").and_then(Value::as_object) {
+            Some(p) => p,
+            None => continue,
+        };
+        let token = match acc.get("accessToken").and_then(Value::as_str) {
+            Some(t) if !t.is_empty() => t.to_string(),
+            _ => continue,
+        };
+        let name = profile.get("name").and_then(Value::as_str).unwrap_or("Player").to_string();
+        let id = profile
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|s| uuid::Uuid::try_parse(s).ok())
+            .unwrap_or_else(uuid::Uuid::nil);
+
+        let expires = acc
+            .get("accessTokenExpiresAt")
+            .and_then(Value::as_str)
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc));
+
+        // If we know the expiry and it has already passed, the token is stale.
+        if let Some(exp) = expires
+            && exp <= Utc::now()
+        {
+            return Some(Err(()));
+        }
+
+        return Some(Ok(MinecraftAccount {
+            id,
+            username: name,
+            access_token: token,
+            refresh_token: String::new(),
+            expires: expires.unwrap_or_else(|| Utc::now() + chrono::Duration::hours(12)),
+            kind: AccountKind::Microsoft,
+            signed_out: false,
+        }));
+    }
+    None
+}
+
 #[derive(Debug, Clone)]
 pub struct OfficialHandoff {
     /// Name of the profile as it appears in the official launcher.
@@ -158,6 +262,12 @@ pub async fn hand_off_to_official_launcher(
     let mc_dir = official_minecraft_dir()
         .ok_or_else(|| handoff_error("Couldn't find the Minecraft folder on this computer"))?;
 
+    // Same as a normal launch: bundles can pin a newer Java (e.g. C2ME needs Java 25),
+    // and the official launcher would otherwise run the game on its own Java 21.
+    if let Err(err) = crate::clusters::apply_bundle_java_override(state, cluster_id, true, true, None).await {
+        tracing::warn!(cluster_id, error = %err, "failed to apply bundle java override");
+    }
+
     let existing = state.clusters.get(cluster_id).await?;
     let cluster = if existing.stage == crate::ClusterStage::Ready {
         existing
@@ -188,7 +298,7 @@ pub async fn hand_off_to_official_launcher(
     let profile = state.clusters.resolve_settings(&global, &cluster).await?;
     let mc_version = oneclient_common::version::normalize_mc_version_input(&cluster.mc_version);
 
-    let (version_id, loader_version_id) = {
+    let (version_id, loader_version_id, version_info) = {
         let mut metadata = state.metadata.lock().await;
         let (version, _index, _updated) =
             crate::game::resolve_minecraft_version(&mut metadata, &state.services.mc(), &mc_version).await?;
@@ -200,7 +310,34 @@ pub async fn hand_off_to_official_launcher(
             cluster.mc_loader_version.as_deref(),
         )
         .await?;
-        (version.id.clone(), loader_version.map(|lv| lv.id))
+        let version_info = crate::game::download_version_info(
+            &state.services.mc(),
+            None,
+            &version,
+            cluster.mc_loader,
+            loader_version.as_ref(),
+            false,
+        )
+        .await?;
+        (version.id.clone(), loader_version.map(|lv| lv.id), version_info)
+    };
+
+    // The Java this instance needs, picked exactly like a normal launch
+    let native_ok = crate::game::natives::native_java_ok(&version_info);
+    let pinned = state.java.runtime_for_profile(profile.java_path.as_deref()).await?;
+    let java = match pinned {
+        Some(runtime) if !oneclient_java::wrong_arch_for_game(&runtime.os_arch, native_ok) => runtime,
+        pinned => {
+            let major = match &pinned {
+                Some(runtime) => runtime.major,
+                None => version_info
+                    .java_version
+                    .as_ref()
+                    .map(|v| v.major_version)
+                    .ok_or(GameError::MissingJavaVersion)?,
+            };
+            state.java.prepare(major, native_ok, true, true, None).await?
+        }
     };
 
     // Mods and the rest of the instance's content, same as a normal launch.
@@ -274,7 +411,15 @@ pub async fn hand_off_to_official_launcher(
         &custom_args,
         &mods_dir,
     ) {
-        java_args.push_str(&format!(" \"{arg}\""));
+        // The official launcher splits JVM args on spaces and passes quotes through as-is,
+        // which turns a quoted arg into the "main class" and kills the game with exit code 1.
+        // Only quote when the path really has a space.
+        if arg.contains(char::is_whitespace) {
+            java_args.push_str(&format!(" \"{arg}\""));
+        } else {
+            java_args.push(' ');
+            java_args.push_str(&arg);
+        }
     }
     if !custom_args.trim().is_empty() {
         java_args.push(' ');
@@ -282,7 +427,7 @@ pub async fn hand_off_to_official_launcher(
     }
 
     let profile_name = format!("Qeezy · {}", cluster.name);
-    write_launcher_profile(&mc_dir, cluster.id, &profile_name, &last_version_id, &game_dir, &java_args).await?;
+    write_launcher_profile(&mc_dir, cluster.id, &profile_name, &last_version_id, &game_dir, &java_args, Some(&java.absolute_path)).await?;
 
     let opened = open_official_launcher().await;
     tracing::info!(cluster_id, opened, version = %last_version_id, "handed instance to the official launcher");
@@ -296,6 +441,7 @@ async fn write_launcher_profile(
     version: &str,
     game_dir: &Path,
     java_args: &str,
+    java_exe: Option<&str>,
 ) -> LauncherResult<()> {
     let file = mc_dir.join("launcher_profiles.json");
     tokio::fs::create_dir_all(mc_dir).await.map_err(|e| handoff_error(e.to_string()))?;
@@ -333,6 +479,9 @@ async fn write_launcher_profile(
         "javaArgs": java_args,
         "icon": icon,
     });
+    if let Some(exe) = java_exe {
+        root["profiles"][&key]["javaDir"] = json!(exe);
+    }
     let text = serde_json::to_string_pretty(&root)?;
     let tmp = mc_dir.join("launcher_profiles.json.qeezy-tmp");
     tokio::fs::write(&tmp, text).await.map_err(|e| handoff_error(e.to_string()))?;
@@ -412,7 +561,7 @@ mod tests {
         )
         .unwrap();
         let game_dir = mc.join("instances").join("qeezy");
-        write_launcher_profile(&mc, 7, "Qeezy · Test", "fabric-loader-0.18.4-1.21.11", &game_dir, "-Xmx4096M")
+        write_launcher_profile(&mc, 7, "Qeezy · Test", "fabric-loader-0.18.4-1.21.11", &game_dir, "-Xmx4096M", None)
             .await
             .unwrap();
         let root: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
@@ -428,7 +577,7 @@ mod tests {
 
         // a second hand-off keeps the original "created" date
         let created = p["created"].clone();
-        write_launcher_profile(&mc, 7, "Qeezy · Test", "fabric-loader-0.18.4-1.21.11", &game_dir, "-Xmx4096M")
+        write_launcher_profile(&mc, 7, "Qeezy · Test", "fabric-loader-0.18.4-1.21.11", &game_dir, "-Xmx4096M", None)
             .await
             .unwrap();
         let again: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
@@ -439,7 +588,7 @@ mod tests {
     #[tokio::test]
     async fn launcher_profile_file_is_created_when_missing() {
         let mc = temp_dir("fresh");
-        write_launcher_profile(&mc, 1, "Qeezy · Fresh", "1.21.11", &mc.join("g"), "-Xmx2048M").await.unwrap();
+        write_launcher_profile(&mc, 1, "Qeezy · Fresh", "1.21.11", &mc.join("g"), "-Xmx2048M", None).await.unwrap();
         let root: Value = serde_json::from_str(&std::fs::read_to_string(mc.join("launcher_profiles.json")).unwrap()).unwrap();
         assert_eq!(root["version"], 3);
         assert_eq!(root["profiles"]["qeezy-1"]["lastVersionId"], "1.21.11");
@@ -482,5 +631,65 @@ mod duplicate_tests {
         let state: Value = serde_json::from_str(&std::fs::read_to_string(game.join("config/qeezyclient/pack-state.json")).unwrap()).unwrap();
         assert!(state["installed"].get("sodium").is_none());
         assert!(state["installed"].get("lithium").is_some());
+    }
+}
+
+#[cfg(test)]
+mod official_account_tests {
+    use super::*;
+
+    fn tmp() -> PathBuf {
+        let d = std::env::temp_dir().join(format!("qeezy-acct-{}-{}", std::process::id(), rand_suffix()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+    fn rand_suffix() -> u64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64
+    }
+
+    #[test]
+    fn reads_the_active_account_with_a_valid_token() {
+        let dir = tmp();
+        let future = (Utc::now() + chrono::Duration::hours(10)).to_rfc3339();
+        std::fs::write(
+            dir.join("launcher_accounts.json"),
+            format!(
+                r#"{{"accounts":{{
+                    "aaa":{{"accessToken":"TOKEN_A","accessTokenExpiresAt":"{future}","minecraftProfile":{{"id":"0123456789abcdef0123456789abcdef","name":"Qeezy"}}}},
+                    "bbb":{{"accessToken":"TOKEN_B","minecraftProfile":{{"id":"ffffffffffffffffffffffffffffffff","name":"Other"}}}}
+                }},"activeAccountLocalId":"bbb"}}"#
+            ),
+        )
+        .unwrap();
+        match account_from_file(&dir.join("launcher_accounts.json")) {
+            Some(Ok(acc)) => {
+                assert_eq!(acc.username, "Other"); // the active one
+                assert_eq!(acc.access_token, "TOKEN_B");
+                assert_eq!(acc.kind, AccountKind::Microsoft);
+            }
+            other => panic!("expected a ready account, got {:?}", other.map(|r| r.map(|a| a.username))),
+        }
+    }
+
+    #[test]
+    fn an_expired_token_is_reported_stale() {
+        let dir = tmp();
+        let past = (Utc::now() - chrono::Duration::hours(2)).to_rfc3339();
+        std::fs::write(
+            dir.join("launcher_accounts.json"),
+            format!(
+                r#"{{"accounts":{{"aaa":{{"accessToken":"OLD","accessTokenExpiresAt":"{past}","minecraftProfile":{{"id":"0123456789abcdef0123456789abcdef","name":"Qeezy"}}}}}},"activeAccountLocalId":"aaa"}}"#
+            ),
+        )
+        .unwrap();
+        assert!(matches!(account_from_file(&dir.join("launcher_accounts.json")), Some(Err(()))));
+    }
+
+    #[test]
+    fn no_file_and_empty_accounts_are_missing() {
+        let dir = tmp();
+        assert!(account_from_file(&dir.join("nope.json")).is_none());
+        std::fs::write(dir.join("empty.json"), r#"{"accounts":{}}"#).unwrap();
+        assert!(account_from_file(&dir.join("empty.json")).is_none());
     }
 }

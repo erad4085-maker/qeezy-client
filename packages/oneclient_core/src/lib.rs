@@ -43,7 +43,7 @@ pub use clusters::{
 pub use disable_warnings::{DisableWarnings, fetch_disable_warnings};
 pub use error::{LauncherError, LauncherResult, SentryExclusion};
 pub use game::{
-    OfficialHandoff, hand_off_to_official_launcher,
+    OfficialAccount, OfficialHandoff, hand_off_to_official_launcher, read_official_minecraft_account,
     GameError, GameVersionInfo, GameVersionKind, LaunchedGame, get_loader_versions,
     get_loaders_for_version, get_version_ids, get_versions_for_loader, launch_cluster,
     launch_cluster_with,
